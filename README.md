@@ -1,11 +1,11 @@
 # Cleanreads
 Cleanreads userscript for Goodreads.com
 
-1. [What is Cleanreads](#introduction)
-2. [Installation](#installation)
-3. [Instructions](#instructions)
+1. [Introduction. What is Cleanreads?](#introduction)
+2. [Installation. What is a userscript?](#installation)
+3. [Instructions. What do I do?](#instructions)
 
-## Introduction! What is Cleanreads?
+## Introduction
 
 I'm often searching for books on Goodreads and end up searching through the description, Q/A, and comments in an attempt to determine if the book is a 'clean' read.
 
@@ -17,7 +17,7 @@ A simple example of what this can show you:
 
 ![Simple Cleanreads example](/images/What_Is_Cleanreads.png)
 
-## Installation. What is a userscript?
+## Installation
 
 This is a userscript, so it's custom JavaScript that is run on certain webpages to do custom actions.
 
@@ -32,7 +32,7 @@ On the link above just click the big "Install this script" button and Tampermonk
 
 Once you've installed the script, that should be all there is to it! Go visit a book on Goodreads and it should all work! If not, feel free to ask a question on the Greasyfork page or contact me directly.
 
-## Instructions. What do I do?
+## Instructions
 
 All you need to do is visit a book and it should all work! The script will parse the data on the page, give you a Cleanreads rating guesstimate and let you view the details of how it came up with the estimate.
 
