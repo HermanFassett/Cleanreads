@@ -42,9 +42,11 @@ GM_addStyle( `
     #crSettingsHeader h1 {
         line-height: 50px;
         color: #382110;
+    }
+    #crSettingsHeader h1, .crSettingsHeader {
         font-family: "Lato", "Helvetica Neue", "Helvetica", sans-serif;
     }
-    #crSettingsBody { height: 400px; }
+    #crSettingsBody { height: 360px; padding: 20px 0 20px 0; }
     #crSettingsFooter {
         height: 50px;
         width: 100%;
@@ -52,7 +54,11 @@ GM_addStyle( `
     }
     #crSettingsFooter button {
         float: right;
-        margin: 10px;
+        margin: 10px 10px 0 0;
+    }
+    #crSettingsFooter button.saveButton {
+        color: white;
+        background-color: #409D69;
     }
 `);
 
@@ -72,6 +78,47 @@ GM_addStyle( `
     ];
 
     /**
+     * Load the positive and negative search terms from local storage if existant
+     */
+    Cleanreads.loadSettings = function() {
+        try {
+            Cleanreads.POSITIVE_SEARCH_TERMS = JSON.parse(localStorage.getItem("Cleanreads.POSITIVE_SEARCH_TERMS")) || Cleanreads.POSITIVE_SEARCH_TERMS;
+            Cleanreads.NEGATIVE_SEARCH_TERMS = JSON.parse(localStorage.getItem("Cleanreads.NEGATIVE_SEARCH_TERMS")) || Cleanreads.NEGATIVE_SEARCH_TERMS;
+
+            let settingsBody = document.getElementById("crSettingsBody");
+            if (settingsBody) {
+                settingsBody.innerHTML = `
+                <div class="grey500Box userInfoBoxContent">
+                    <h1 class="crSettingsHeader">Positive Search Terms:</h1>
+                    ${
+                        Cleanreads.POSITIVE_SEARCH_TERMS.map((search) => {
+                            return `${search.term}`
+                        }).join(", ")
+                    }
+                    <br />
+                    <h1 class="crSettingsHeader">Negative Search Terms:</h1>
+                    ${
+                        Cleanreads.NEGATIVE_SEARCH_TERMS.map((search) => {
+                            return `${search.term}`
+                        }).join(", ")
+                    }
+                </div>
+                `;
+            }
+        } catch (ex) {
+            console.error("Cleanreads: Failed to load settings!", ex);
+        }
+    };
+
+    /**
+     * Save the positive and negative search terms to local storage
+     */
+    Cleanreads.saveSettings = function() {
+        localStorage.setItem("Cleanreads.POSITIVE_SEARCH_TERMS", JSON.stringify(Cleanreads.POSITIVE_SEARCH_TERMS));
+        localStorage.setItem("Cleanreads.NEGATIVE_SEARCH_TERMS", JSON.stringify(Cleanreads.NEGATIVE_SEARCH_TERMS));
+    }
+
+    /**
      * Setup the settings modal for Cleanreads
      */
     Cleanreads.setupSettings = function() {
@@ -88,7 +135,8 @@ GM_addStyle( `
         document.body.innerHTML += `
             <div id="crSettingsDialog">
                 <div id="crSettingsHeader"><h1>Cleanreads Settings</h1></div>
-                <div id="crSettingsBody"></div>
+                <div id="crSettingsBody">
+                </div>
                 <div id="crSettingsFooter"></div>
             </div>
             `;
@@ -104,7 +152,14 @@ GM_addStyle( `
         closeButton.className = 'gr-button';
         closeButton.onclick = Cleanreads.hideSettings;
         document.getElementById('crSettingsFooter').appendChild(closeButton);
-    }
+        // Add save button to dialog
+        let saveButton = document.createElement('button');
+        saveButton.innerText = 'Save';
+        saveButton.className = 'gr-button saveButton';
+        saveButton.onclick = Cleanreads.saveSettings;
+        document.getElementById('crSettingsFooter').appendChild(saveButton);
+        Cleanreads.loadSettings();
+    };
 
     /**
      * Setup the rating (verdict) container on a book page
@@ -112,6 +167,7 @@ GM_addStyle( `
     Cleanreads.setupRating = function() {
         let match = window.location.pathname.match(/book\/show\/(\d+)/);
         if (match && match.length > 1) {
+            Cleanreads.loadSettings();
             Cleanreads.reviews = [];
             Cleanreads.attempts = 10;
             Cleanreads.positives = 0;
@@ -136,7 +192,7 @@ GM_addStyle( `
             document.getElementById('expandCrDetails').onclick = Cleanreads.expandDetails;
             Cleanreads.startReviews();
         }
-    }
+    };
 
     /**
      * Start attempting to get the available reviews on the page and read their content
@@ -149,7 +205,7 @@ GM_addStyle( `
         } else {
             Cleanreads.calculateContent();
         }
-    }
+    };
 
     /**
      * Get reviews from page (only gets the first page of reviews, not easy to access others without API)
@@ -157,14 +213,14 @@ GM_addStyle( `
     Cleanreads.getReviews = function() {
         let reviewElements = document.getElementsByClassName('reviewText');
         Cleanreads.reviews = Array.from(reviewElements).map(x => (x.querySelector('[style]') || x).innerText.trim());
-    }
+    };
 
     /**
      * Get title as text with series appended
      */
     Cleanreads.getTitle = function() {
         return document.getElementById('bookTitle').innerText.trim() + document.getElementById('bookSeries').innerText.trim();
-    }
+    };
 
     /**
      * Get book description text
@@ -172,7 +228,7 @@ GM_addStyle( `
     Cleanreads.getDescription = function() {
         let description = document.getElementById('description');
         return (description.querySelector('[style]') || description).innerText.trim();
-    }
+    };
 
     /**
      * Calculate the cleanliness 
@@ -208,7 +264,7 @@ GM_addStyle( `
         }
         // Update Clean Reads verdict
         Cleanreads.updateVerdict();
-    }
+    };
 
     /**
      * Search text for a given term, add found position to given container and increment positive/negative verdict
@@ -228,7 +284,7 @@ GM_addStyle( `
                     ...${content.slice(index - 50, index)}<b class="content${positive ? '' : 'Not'}Clean">${content.substr(index, contentMatch[3].length)}</b>${content.slice(index + contentMatch[3].length, index + 50)}...
                 </div>`;
         }
-    }
+    };
 
     /**
      * Update the verdict shown in UI on the book
@@ -247,7 +303,7 @@ GM_addStyle( `
         }
         document.getElementById('crPositives').innerText = Cleanreads.positives;
         document.getElementById('crNegatives').innerText = Cleanreads.negatives;
-    }
+    };
 
     /**
      * Expand the details section of Cleanreads verdict
@@ -262,7 +318,7 @@ GM_addStyle( `
             Cleanreads.crDetails.style.display = 'none';
             this.innerText = collapsedText;
         }
-    }
+    };
 
     /**
      * Show the settings modal for Cleanreads
@@ -270,7 +326,7 @@ GM_addStyle( `
     Cleanreads.showSettings = function() {
         document.getElementById("crSettingsDialog").style.display = 'block';
         return false;
-    }
+    };
 
     /**
      * Hide the settings modal for Cleanreads
@@ -278,7 +334,7 @@ GM_addStyle( `
     Cleanreads.hideSettings = function() {
         document.getElementById("crSettingsDialog").style.display = 'none';
         return false;
-    }
+    };
 
     // Loading. If on a book load the verdict, else if on a user page load settings
     if (window.location.href.match("/book/")) {
