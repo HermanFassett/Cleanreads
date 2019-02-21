@@ -59,49 +59,57 @@ GM_addStyle( `
 (function(Cleanreads) {
     'use strict';
 
-    // Search terms. Strings or regex
+    /** The positive search terms when determining verdict */
     Cleanreads.POSITIVE_SEARCH_TERMS = [
         { term: 'clean', exclude: { before: ['not', 'isn\'t'], after: ['ing'] }},
         { term: 'no sex', exclude: { before: [], after: [] }}
     ];
+
+    /** The negative search terms when determining verdict */
     Cleanreads.NEGATIVE_SEARCH_TERMS = [
         { term: 'sex', exclude: { before: ['no'], after: ['ist'] }},
         { term: 'adult', exclude: { before: ['young', 'new'], after: []}}
     ];
 
-    function setupSettings() {
+    /**
+     * Setup the settings modal for Cleanreads
+     */
+    Cleanreads.setupSettings = function() {
         // Add link to menu dropdown
         let links = Array.from(document.getElementsByClassName('menuLink')).filter(x => x.innerText == 'Account settings');
         if (links && links.length) {
             let li = document.createElement('li');
             li.className = 'menuLink';
-            li.onclick = showSettings;
+            li.onclick = Cleanreads.showSettings;
             li.innerHTML = `<a href='#' class='siteHeader__subNavLink'>Cleanreads settings</a>`;
             links[0].parentNode.insertBefore(li, links[0].nextSibling);
         }
         // Add dialog
         document.body.innerHTML += `
-<div id="crSettingsDialog">
-    <div id="crSettingsHeader"><h1>Cleanreads Settings</h1></div>
-    <div id="crSettingsBody"></div>
-    <div id="crSettingsFooter"></div>
-</div>
-`;
+            <div id="crSettingsDialog">
+                <div id="crSettingsHeader"><h1>Cleanreads Settings</h1></div>
+                <div id="crSettingsBody"></div>
+                <div id="crSettingsFooter"></div>
+            </div>
+            `;
         // Add link to profile page
         let settingsLink = document.createElement('a');
         settingsLink.href = '#';
         settingsLink.innerText = 'Cleanreads settings';
-        settingsLink.onclick = showSettings;
+        settingsLink.onclick = Cleanreads.showSettings;
         document.getElementsByClassName('userInfoBoxContent')[0].appendChild(settingsLink);
         // Add close button to dialog
         let closeButton = document.createElement('button');
         closeButton.innerText = 'Close';
         closeButton.className = 'gr-button';
-        closeButton.onclick = hideSettings;
+        closeButton.onclick = Cleanreads.hideSettings;
         document.getElementById('crSettingsFooter').appendChild(closeButton);
     }
 
-    function setupRating() {
+    /**
+     * Setup the rating (verdict) container on a book page
+     */
+    Cleanreads.setupRating = function() {
         let match = window.location.pathname.match(/book\/show\/(\d+)/);
         if (match && match.length > 1) {
             Cleanreads.reviews = [];
@@ -115,51 +123,61 @@ GM_addStyle( `
             contentDescription.id = 'contentDescription';
             contentDescription.className = 'readable stacked u-bottomGrayBorder u-marginTopXSmall u-paddingBottomXSmall';
             contentDescription.innerHTML = `
-<h2 class="buyButtonContainer__title u-inlineBlock">Cleanreads Rating</h2>
-<h2 class="buyButtonContainer__title">
-Verdict: <span id="crVerdict">Loading...</span>
-(<span id="crPositives" class="contentClean">0</span>/<span id="crNegatives" class="contentNotClean">0</span>)
-</h2>
-<a id='expandCrDetails' href="#">(Details)</a>
-<div id="crDetails" style="display:none"></div>
-`;
+                <h2 class="buyButtonContainer__title u-inlineBlock">Cleanreads Rating</h2>
+                <h2 class="buyButtonContainer__title">
+                Verdict: <span id="crVerdict">Loading...</span>
+                (<span id="crPositives" class="contentClean">0</span>/<span id="crNegatives" class="contentNotClean">0</span>)
+                </h2>
+                <a id='expandCrDetails' href="#">(Details)</a>
+                <div id="crDetails" style="display:none"></div>
+                `;
             container.parentNode.insertBefore(contentDescription, container.nextSibling);
             Cleanreads.crDetails = document.getElementById('crDetails');
-            document.getElementById('expandCrDetails').onclick = expandDetails;
-            startReviews();
+            document.getElementById('expandCrDetails').onclick = Cleanreads.expandDetails;
+            Cleanreads.startReviews();
         }
     }
 
-    function startReviews() {
-        getReviews();
+    /**
+     * Start attempting to get the available reviews on the page and read their content
+     */
+    Cleanreads.startReviews = function() {
+        Cleanreads.getReviews();
         // Reviews are delayed content so keep looking for a bit if nothing
         if (!Cleanreads.reviews.length && Cleanreads.attempts--) {
-            setTimeout(startReviews, 1000);
+            setTimeout(Cleanreads.startReviews, 1000);
         } else {
-            calculateContent();
+            Cleanreads.calculateContent();
         }
     }
 
-    // Get reviews from page (only gets the first page of reviews, not easy to access others without API)
-    function getReviews() {
-        let reviewContainer = document.getElementById('bookReviews');
+    /**
+     * Get reviews from page (only gets the first page of reviews, not easy to access others without API)
+     */
+    Cleanreads.getReviews = function() {
         let reviewElements = document.getElementsByClassName('reviewText');
         Cleanreads.reviews = Array.from(reviewElements).map(x => (x.querySelector('[style]') || x).innerText.trim());
     }
 
-    // Get title as text with series appended
-    function getTitle() {
+    /**
+     * Get title as text with series appended
+     */
+    Cleanreads.getTitle = function() {
         return document.getElementById('bookTitle').innerText.trim() + document.getElementById('bookSeries').innerText.trim();
     }
 
-    // Get book description text
-    function getDescription() {
+    /**
+     * Get book description text
+     */
+    Cleanreads.getDescription = function() {
         let description = document.getElementById('description');
         return (description.querySelector('[style]') || description).innerText.trim();
     }
 
-    // Calculate the cleanliness
-    function calculateContent() {
+    /**
+     * Calculate the cleanliness 
+     */
+    Cleanreads.calculateContent = function() {
         let count = 0, containing = [];
         // Insert containers for bases
         Cleanreads.crDetails.innerHTML += `<h2 class="buyButtonContainer__title u-marginTopXSmall">Description Content Basis: </h2><div id="descriptionBasis"></div>`;
@@ -170,13 +188,13 @@ Verdict: <span id="crVerdict">Loading...</span>
             cleanBasis = document.getElementById('cleanBasis'),
             notCleanBasis = document.getElementById('notCleanBasis');
         // Search description
-        let description = `Title: ${getTitle()}\nDescription: ${getDescription()}`;
-        Cleanreads.POSITIVE_SEARCH_TERMS.forEach(term => searchContent(term, description, descriptionBasis, true));
-        Cleanreads.NEGATIVE_SEARCH_TERMS.forEach(term => searchContent(term, description, descriptionBasis, false));
+        let description = `Title: ${Cleanreads.getTitle()}\nDescription: ${Cleanreads.getDescription()}`;
+        Cleanreads.POSITIVE_SEARCH_TERMS.forEach(term => Cleanreads.searchContent(term, description, descriptionBasis, true));
+        Cleanreads.NEGATIVE_SEARCH_TERMS.forEach(term => Cleanreads.searchContent(term, description, descriptionBasis, false));
         // Search reviews
         Cleanreads.reviews.forEach(review => {
-            Cleanreads.POSITIVE_SEARCH_TERMS.forEach(term => searchContent(term, review, cleanBasis, true));
-            Cleanreads.NEGATIVE_SEARCH_TERMS.forEach(term => searchContent(term, review, notCleanBasis, false));
+            Cleanreads.POSITIVE_SEARCH_TERMS.forEach(term => Cleanreads.searchContent(term, review, cleanBasis, true));
+            Cleanreads.NEGATIVE_SEARCH_TERMS.forEach(term => Cleanreads.searchContent(term, review, notCleanBasis, false));
         });
         // Fill bases if nothing
         if (!descriptionBasis.innerHTML) {
@@ -189,11 +207,17 @@ Verdict: <span id="crVerdict">Loading...</span>
             notCleanBasis.innerHTML = '<i class="contentComment">None</i>';
         }
         // Update Clean Reads verdict
-        updateVerdict();
+        Cleanreads.updateVerdict();
     }
 
-    // Search text for a given term, add found position to given container and increment positive/negative
-    function searchContent(term, content, container, positive) {
+    /**
+     * Search text for a given term, add found position to given container and increment positive/negative verdict
+     * @param {string} term - The search term
+     * @param {string} content - The content to search
+     * @param {element} container - The dom element to append result to
+     * @param {boolean} positive - Flag if positive or negative search term to determine result
+     */
+    Cleanreads.searchContent = function(term, content, container, positive) {
         let regex = new RegExp(`(^|[^(${term.exclude.before.join`|`}|\\s*)])(\\s*)(${term.term})(\\s*)($|[^(${term.exclude.after.join`|`}|\\s*)])`);
         let contentMatch = content.toLowerCase().match(regex);
         if (contentMatch) {
@@ -206,7 +230,10 @@ Verdict: <span id="crVerdict">Loading...</span>
         }
     }
 
-    function updateVerdict() {
+    /**
+     * Update the verdict shown in UI on the book
+     */
+    Cleanreads.updateVerdict = function() {
         let verdict = document.getElementById('crVerdict');
         if (Cleanreads.positives && Cleanreads.positives > Cleanreads.negatives) {
             verdict.innerText = `${Cleanreads.negatives ? 'Probably' : 'Most likely'} clean`;
@@ -222,7 +249,10 @@ Verdict: <span id="crVerdict">Loading...</span>
         document.getElementById('crNegatives').innerText = Cleanreads.negatives;
     }
 
-    function expandDetails() {
+    /**
+     * Expand the details section of Cleanreads verdict
+     */
+    Cleanreads.expandDetails = function() {
         let collapsedText = '(Details)',
             expandedText = '(Hide)';
         if (this.innerText == collapsedText) {
@@ -234,21 +264,26 @@ Verdict: <span id="crVerdict">Loading...</span>
         }
     }
 
-    function showSettings() {
-        console.log("cr settings");
+    /**
+     * Show the settings modal for Cleanreads
+     */
+    Cleanreads.showSettings = function() {
         document.getElementById("crSettingsDialog").style.display = 'block';
         return false;
     }
 
-    function hideSettings() {
+    /**
+     * Hide the settings modal for Cleanreads
+     */
+    Cleanreads.hideSettings = function() {
         document.getElementById("crSettingsDialog").style.display = 'none';
         return false;
     }
 
+    // Loading. If on a book load the verdict, else if on a user page load settings
     if (window.location.href.match("/book/")) {
-        setupRating();
-    }
-    if (window.location.href.match("/user/")) {
-        setupSettings()
+        Cleanreads.setupRating();
+    } else if (window.location.href.match("/user/")) {
+        Cleanreads.setupSettings()
     }
 })(window.Cleanreads = window.Cleanreads || {});
