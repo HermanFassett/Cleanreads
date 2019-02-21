@@ -100,6 +100,7 @@ GM_addStyle( `
         closeButton.onclick = hideSettings;
         document.getElementById('crSettingsFooter').appendChild(closeButton);
     }
+
     function setupRating() {
         let match = window.location.pathname.match(/book\/show\/(\d+)/);
         if (match && match.length > 1) {
@@ -244,6 +245,10 @@ Verdict: <span id="crVerdict">Loading...</span>
         return false;
     }
 
-    setupSettings();
-    setupRating();
+    if (window.location.href.match("/book/")) {
+        setupRating();
+    }
+    if (window.location.href.match("/user/")) {
+        setupSettings()
+    }
 })(window.Cleanreads = window.Cleanreads || {});
