@@ -9,18 +9,10 @@
 // ==/UserScript==
 
 GM_addStyle( `
-    .contentComment {
-        padding: 10px 5px 10px 5px;
-    }
-    .contentClean {
-        color: green;
-    }
-    .contentNotClean {
-        color: red;
-    }
-    .contentUnknown {
-        color: blue;
-    }
+    .contentComment { padding: 10px 5px 10px 5px; }
+    .contentClean { color: green; }
+    .contentNotClean { color: red; }
+    .contentUnknown { color: blue; }
     #crSettingsDialog {
         width: 500px;
         height: 500px;
@@ -46,7 +38,8 @@ GM_addStyle( `
     #crSettingsHeader h1, .crSettingsHeader {
         font-family: "Lato", "Helvetica Neue", "Helvetica", sans-serif;
     }
-    #crSettingsBody { height: 360px; padding: 20px 0 20px 0; }
+    .crSettingsHeader { padding-top: 20px; }
+    #crSettingsBody { height: 400px; }
     #crSettingsFooter {
         height: 50px;
         width: 100%;
@@ -59,6 +52,11 @@ GM_addStyle( `
     #crSettingsFooter button.saveButton {
         color: white;
         background-color: #409D69;
+    }
+    .crTermsContainer { display: inline-block; }
+    #crSnippetHeader {
+        float: left;
+        padding-right: 10px;
     }
 `);
 
@@ -77,31 +75,47 @@ GM_addStyle( `
         { term: 'adult', exclude: { before: ['young', 'new'], after: []}}
     ];
 
+    Cleanreads.SNIPPET_HALF_LENGTH = 65;
+
     /**
-     * Load the positive and negative search terms from local storage if existant
+     * Load the settings from local storage if existant
      */
     Cleanreads.loadSettings = function() {
         try {
             Cleanreads.POSITIVE_SEARCH_TERMS = JSON.parse(localStorage.getItem("Cleanreads.POSITIVE_SEARCH_TERMS")) || Cleanreads.POSITIVE_SEARCH_TERMS;
             Cleanreads.NEGATIVE_SEARCH_TERMS = JSON.parse(localStorage.getItem("Cleanreads.NEGATIVE_SEARCH_TERMS")) || Cleanreads.NEGATIVE_SEARCH_TERMS;
+            Cleanreads.SNIPPET_HALF_LENGTH = JSON.parse(localStorage.getItem("Cleanreads.SNIPPET_HALF_LENGTH")) || Cleanreads.SNIPPET_HALF_LENGTH;
 
             let settingsBody = document.getElementById("crSettingsBody");
             if (settingsBody) {
                 settingsBody.innerHTML = `
-                <div class="grey500Box userInfoBoxContent">
+                <div class="userInfoBoxContent">
                     <h1 class="crSettingsHeader">Positive Search Terms:</h1>
+                    <div id="crPositiveSearchTerms">
                     ${
                         Cleanreads.POSITIVE_SEARCH_TERMS.map((search) => {
-                            return `${search.term}`
-                        }).join(", ")
+                            return `<div class="crTermsContainer">
+                                    <input name="excludeBefore" value="${search.exclude.before.join(", ")}" type="text" />
+                                    <input name="term" value="${search.term}" type="text" />
+                                    <input name="excludeAfter" value="${search.exclude.after.join(", ")}" type="text" />
+                                    </div>`;
+                        }).join("")
                     }
-                    <br />
+                    </div>
                     <h1 class="crSettingsHeader">Negative Search Terms:</h1>
+                    <div id="crNegativeSearchTerms">
                     ${
                         Cleanreads.NEGATIVE_SEARCH_TERMS.map((search) => {
-                            return `${search.term}`
-                        }).join(", ")
+                            return `<div class="crTermsContainer">
+                                    <input name="excludeBefore" value="${search.exclude.before.join(", ")}" type="text" />
+                                    <input name="term" value="${search.term}" type="text" />
+                                    <input name="excludeAfter" value="${search.exclude.after.join(", ")}" type="text" />
+                                    </div>`;
+                       }).join("")
                     }
+                    </div>
+                    <h1 class="crSettingsHeader">Other Settings:</h1>
+                    <h4 id="crSnippetHeader">Snippet length:</h4> <input id="crSnippetHalfLength" type="number" value="${Cleanreads.SNIPPET_HALF_LENGTH}" />
                 </div>
                 `;
             }
@@ -114,8 +128,13 @@ GM_addStyle( `
      * Save the positive and negative search terms to local storage
      */
     Cleanreads.saveSettings = function() {
+        Cleanreads.POSITIVE_SEARCH_TERMS = JSON.parse(localStorage.getItem("Cleanreads.POSITIVE_SEARCH_TERMS")) || Cleanreads.POSITIVE_SEARCH_TERMS;
+        Cleanreads.NEGATIVE_SEARCH_TERMS = JSON.parse(localStorage.getItem("Cleanreads.NEGATIVE_SEARCH_TERMS")) || Cleanreads.NEGATIVE_SEARCH_TERMS;
+        Cleanreads.SNIPPET_HALF_LENGTH = parseInt(document.getElementById("crSnippetHalfLength").value) || Cleanreads.SNIPPET_HALF_LENGTH;
+
         localStorage.setItem("Cleanreads.POSITIVE_SEARCH_TERMS", JSON.stringify(Cleanreads.POSITIVE_SEARCH_TERMS));
         localStorage.setItem("Cleanreads.NEGATIVE_SEARCH_TERMS", JSON.stringify(Cleanreads.NEGATIVE_SEARCH_TERMS));
+        localStorage.setItem("Cleanreads.SNIPPET_HALF_LENGTH", JSON.stringify(Cleanreads.SNIPPET_HALF_LENGTH));
     }
 
     /**
@@ -231,7 +250,7 @@ GM_addStyle( `
     };
 
     /**
-     * Calculate the cleanliness 
+     * Calculate the cleanliness
      */
     Cleanreads.calculateContent = function() {
         let count = 0, containing = [];
@@ -279,9 +298,12 @@ GM_addStyle( `
         if (contentMatch) {
             positive ? Cleanreads.positives++ : Cleanreads.negatives++;
             let index = contentMatch.index + contentMatch[1].length + contentMatch[2].length;
+            console.log(index, Cleanreads.SNIPPET_HALF_LENGTH);
             container.innerHTML += `
                 <div class="contentComment">
-                    ...${content.slice(index - 50, index)}<b class="content${positive ? '' : 'Not'}Clean">${content.substr(index, contentMatch[3].length)}</b>${content.slice(index + contentMatch[3].length, index + 50)}...
+                    ...${content.slice(index - Cleanreads.SNIPPET_HALF_LENGTH, index)}<b class="content${positive ? '' : 'Not'}Clean">${
+                        content.substr(index, contentMatch[3].length)
+                    }</b>${content.slice(index + contentMatch[3].length, index + Cleanreads.SNIPPET_HALF_LENGTH)}...
                 </div>`;
         }
     };
