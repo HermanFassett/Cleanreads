@@ -38,8 +38,9 @@ GM_addStyle( `
     #crSettingsHeader h1, .crSettingsHeader {
         font-family: "Lato", "Helvetica Neue", "Helvetica", sans-serif;
     }
-    .crSettingsHeader { padding-top: 20px; }
-    #crSettingsBody { height: 400px; }
+    .crSettingsHeader, #crSettingsTermButtons { padding-top: 20px; }
+    #crSettingsTermButtons button { margin-right: 5px; }
+    #crSettingsBody { height: 400px; overflow: auto; }
     #crSettingsFooter {
         height: 50px;
         width: 100%;
@@ -90,34 +91,46 @@ GM_addStyle( `
             if (settingsBody) {
                 settingsBody.innerHTML = `
                 <div class="userInfoBoxContent">
+                    <div id="crSettingsTermButtons">
+                    </div>
                     <h1 class="crSettingsHeader">Positive Search Terms:</h1>
                     <div id="crPositiveSearchTerms">
-                    ${
-                        Cleanreads.POSITIVE_SEARCH_TERMS.map((search) => {
-                            return `<div class="crTermsContainer">
-                                    <input name="excludeBefore" value="${search.exclude.before.join(", ")}" type="text" />
-                                    <input name="term" value="${search.term}" type="text" />
-                                    <input name="excludeAfter" value="${search.exclude.after.join(", ")}" type="text" />
-                                    </div>`;
-                        }).join("")
-                    }
                     </div>
                     <h1 class="crSettingsHeader">Negative Search Terms:</h1>
                     <div id="crNegativeSearchTerms">
-                    ${
-                        Cleanreads.NEGATIVE_SEARCH_TERMS.map((search) => {
-                            return `<div class="crTermsContainer">
-                                    <input name="excludeBefore" value="${search.exclude.before.join(", ")}" type="text" />
-                                    <input name="term" value="${search.term}" type="text" />
-                                    <input name="excludeAfter" value="${search.exclude.after.join(", ")}" type="text" />
-                                    </div>`;
-                       }).join("")
-                    }
                     </div>
                     <h1 class="crSettingsHeader">Other Settings:</h1>
                     <h4 id="crSnippetHeader">Snippet length:</h4> <input id="crSnippetHalfLength" type="number" value="${Cleanreads.SNIPPET_HALF_LENGTH}" />
                 </div>
                 `;
+
+                // Add buttons
+                let addPositiveButton = document.createElement("button");
+                addPositiveButton.innerText = "Add Positive";
+                addPositiveButton.className = "gr-button";
+                addPositiveButton.onclick = Cleanreads.addSearchTerm.bind(null, true, null, null, null);
+                document.getElementById("crSettingsTermButtons").appendChild(addPositiveButton);
+                let addNegativeButton = document.createElement("button");
+                addNegativeButton.innerText = "Add Negative";
+                addNegativeButton.className = "gr-button";
+                addNegativeButton.onclick = Cleanreads.addSearchTerm.bind(null, false, null, null, null);
+                document.getElementById("crSettingsTermButtons").appendChild(addNegativeButton);
+                let resetButton = document.createElement("button");
+                resetButton.innerText = "Reset";
+                resetButton.className = "gr-button";
+                resetButton.onclick = function() {
+                    if (confirm("Are you sure you want to remove? You will have to refresh the page to see default values loaded.")) {
+                        localStorage.removeItem("Cleanreads.POSITIVE_SEARCH_TERMS");
+                        localStorage.removeItem("Cleanreads.NEGATIVE_SEARCH_TERMS");
+                        localStorage.removeItem("Cleanreads.SNIPPET_HALF_LENGTH");
+                        Cleanreads.loadSettings();
+                    }
+                }
+                document.getElementById("crSettingsTermButtons").appendChild(resetButton);
+
+                // Add existing terms
+                Cleanreads.POSITIVE_SEARCH_TERMS.forEach((search) => Cleanreads.addSearchTerm(true, search.term, search.exclude.before, search.exclude.after));
+                Cleanreads.NEGATIVE_SEARCH_TERMS.forEach((search) => Cleanreads.addSearchTerm(false, search.term, search.exclude.before, search.exclude.after));
             }
         } catch (ex) {
             console.error("Cleanreads: Failed to load settings!", ex);
@@ -128,13 +141,35 @@ GM_addStyle( `
      * Save the positive and negative search terms to local storage
      */
     Cleanreads.saveSettings = function() {
-        Cleanreads.POSITIVE_SEARCH_TERMS = JSON.parse(localStorage.getItem("Cleanreads.POSITIVE_SEARCH_TERMS")) || Cleanreads.POSITIVE_SEARCH_TERMS;
-        Cleanreads.NEGATIVE_SEARCH_TERMS = JSON.parse(localStorage.getItem("Cleanreads.NEGATIVE_SEARCH_TERMS")) || Cleanreads.NEGATIVE_SEARCH_TERMS;
+        let positiveTerms = document.querySelectorAll("#crPositiveSearchTerms > .crTermsContainer");
+        let negativeTerms = document.querySelectorAll("#crNegativeSearchTerms > .crTermsContainer");
+
+        Cleanreads.POSITIVE_SEARCH_TERMS = [...positiveTerms].map((search) => {
+            return {
+                term: search.querySelector("[name=term]").value,
+                exclude: {
+                    before: search.querySelector("[name=excludeBefore]").value.split(",").map(x => x.trim()),
+                    after: search.querySelector("[name=excludeAfter]").value.split(",").map(x => x.trim())
+                }
+            }
+        }).filter(x => x.term);
+
+        Cleanreads.NEGATIVE_SEARCH_TERMS = [...negativeTerms].map((search) => {
+            return {
+                term: search.querySelector("[name=term]").value,
+                exclude: {
+                    before: search.querySelector("[name=excludeBefore]").value.split(",").map(x => x.trim()),
+                    after: search.querySelector("[name=excludeAfter]").value.split(",").map(x => x.trim())
+                }
+            }
+        }).filter(x => x.term);
+
         Cleanreads.SNIPPET_HALF_LENGTH = parseInt(document.getElementById("crSnippetHalfLength").value) || Cleanreads.SNIPPET_HALF_LENGTH;
 
         localStorage.setItem("Cleanreads.POSITIVE_SEARCH_TERMS", JSON.stringify(Cleanreads.POSITIVE_SEARCH_TERMS));
         localStorage.setItem("Cleanreads.NEGATIVE_SEARCH_TERMS", JSON.stringify(Cleanreads.NEGATIVE_SEARCH_TERMS));
         localStorage.setItem("Cleanreads.SNIPPET_HALF_LENGTH", JSON.stringify(Cleanreads.SNIPPET_HALF_LENGTH));
+        Cleanreads.loadSettings();
     }
 
     /**
@@ -178,6 +213,19 @@ GM_addStyle( `
         saveButton.onclick = Cleanreads.saveSettings;
         document.getElementById('crSettingsFooter').appendChild(saveButton);
         Cleanreads.loadSettings();
+    };
+
+    /**
+     * Add a search term to the settings UI
+     */
+    Cleanreads.addSearchTerm = function(positive, term, before, after) {
+        console.log(positive, term, before, after);
+        document.getElementById(`cr${positive ? 'Positive' : 'Negative'}SearchTerms`).insertAdjacentHTML("beforeend",
+            `<div class="crTermsContainer">
+             <input name="excludeBefore" value="${before ? before.join(", ") : ''}" type="text" />
+             <input name="term" value="${term || ''}" type="text" />
+             <input name="excludeAfter" value="${after ? after.join(", ") : ''}" type="text" />
+             </div>`);
     };
 
     /**
