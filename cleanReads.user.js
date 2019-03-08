@@ -272,6 +272,7 @@ GM_addStyle( `
     Cleanreads.startReviews = function() {
         Cleanreads.getReviews();
         // Reviews are delayed content so keep looking for a bit if nothing
+        debugger;
         if (!Cleanreads.reviews.length && Cleanreads.ATTEMPTS--) {
             setTimeout(Cleanreads.startReviews, 1000);
         } else {
@@ -283,7 +284,7 @@ GM_addStyle( `
      * Get reviews from page (only gets the first page of reviews, not easy to access others without API)
      */
     Cleanreads.getReviews = function() {
-        let reviewElements = document.getElementsByClassName('reviewText');
+        let reviewElements = document.querySelectorAll('#reviews .reviewText');
         Cleanreads.reviews = Array.from(reviewElements).map(x => (x.querySelector('[style]') || x).innerText.trim());
     };
 
@@ -346,7 +347,7 @@ GM_addStyle( `
      * @param {boolean} positive - Flag if positive or negative search term to determine result
      */
     Cleanreads.searchContent = function(term, content, container, positive) {
-        let regex = new RegExp(`(^|[^(${term.exclude.before.join`|`}|\\s*)])(\\s*)(${term.term})(\\s*)($|[^(${term.exclude.after.join`|`}|\\s*)])`);
+        let regex = new RegExp(`(^|[^(${term.exclude.before.join`|`}|\\s*)])(\\W*)(${term.term})(\\W*)($|[^(${term.exclude.after.join`|`}|\\s*)])`);
         let contentMatch = content.toLowerCase().match(regex);
         if (contentMatch) {
             positive ? Cleanreads.positives++ : Cleanreads.negatives++;
