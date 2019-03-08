@@ -77,6 +77,7 @@ GM_addStyle( `
     ];
 
     Cleanreads.SNIPPET_HALF_LENGTH = 65;
+    Cleanreads.ATTEMPTS = 10;
 
     /**
      * Load the settings from local storage if existant
@@ -86,6 +87,7 @@ GM_addStyle( `
             Cleanreads.POSITIVE_SEARCH_TERMS = JSON.parse(localStorage.getItem("Cleanreads.POSITIVE_SEARCH_TERMS")) || Cleanreads.POSITIVE_SEARCH_TERMS;
             Cleanreads.NEGATIVE_SEARCH_TERMS = JSON.parse(localStorage.getItem("Cleanreads.NEGATIVE_SEARCH_TERMS")) || Cleanreads.NEGATIVE_SEARCH_TERMS;
             Cleanreads.SNIPPET_HALF_LENGTH = JSON.parse(localStorage.getItem("Cleanreads.SNIPPET_HALF_LENGTH")) || Cleanreads.SNIPPET_HALF_LENGTH;
+            Cleanreads.ATTEMPTS = JSON.parse(localStorage.getItem("Cleanreads.ATTEMPTS")) || Cleanreads.ATTEMPTS;
 
             let settingsBody = document.getElementById("crSettingsBody");
             if (settingsBody) {
@@ -100,7 +102,8 @@ GM_addStyle( `
                     <div id="crNegativeSearchTerms">
                     </div>
                     <h1 class="crSettingsHeader">Other Settings:</h1>
-                    <h4 id="crSnippetHeader">Snippet length:</h4> <input id="crSnippetHalfLength" type="number" value="${Cleanreads.SNIPPET_HALF_LENGTH}" />
+                    <h4 id="crSnippetHeader">Snippet length:</h4> <input id="crSnippetHalfLength" type="number" value="${Cleanreads.SNIPPET_HALF_LENGTH}" min="0" />
+                    <h4 id="crAttemptsHeader">Max Verdict Load Attempts (tries every second):</h4> <input id="crAttempts" type="number" value="${Cleanreads.ATTEMPTS}" min="1" />
                 </div>
                 `;
 
@@ -123,6 +126,7 @@ GM_addStyle( `
                         localStorage.removeItem("Cleanreads.POSITIVE_SEARCH_TERMS");
                         localStorage.removeItem("Cleanreads.NEGATIVE_SEARCH_TERMS");
                         localStorage.removeItem("Cleanreads.SNIPPET_HALF_LENGTH");
+                        localStorage.removeItem("Cleanreads.ATTEMPTS");
                         Cleanreads.loadSettings();
                     }
                 }
@@ -165,10 +169,12 @@ GM_addStyle( `
         }).filter(x => x.term);
 
         Cleanreads.SNIPPET_HALF_LENGTH = parseInt(document.getElementById("crSnippetHalfLength").value) || Cleanreads.SNIPPET_HALF_LENGTH;
+        Cleanreads.ATTEMPTS = parseInt(document.getElementById("crAttempts").value) || Cleanreads.ATTEMPTS;
 
         localStorage.setItem("Cleanreads.POSITIVE_SEARCH_TERMS", JSON.stringify(Cleanreads.POSITIVE_SEARCH_TERMS));
         localStorage.setItem("Cleanreads.NEGATIVE_SEARCH_TERMS", JSON.stringify(Cleanreads.NEGATIVE_SEARCH_TERMS));
         localStorage.setItem("Cleanreads.SNIPPET_HALF_LENGTH", JSON.stringify(Cleanreads.SNIPPET_HALF_LENGTH));
+        localStorage.setItem("Cleanreads.ATTEMPTS", JSON.stringify(Cleanreads.ATTEMPTS));
         Cleanreads.loadSettings();
     }
 
@@ -236,7 +242,6 @@ GM_addStyle( `
         if (match && match.length > 1) {
             Cleanreads.loadSettings();
             Cleanreads.reviews = [];
-            Cleanreads.attempts = 10;
             Cleanreads.positives = 0;
             Cleanreads.negatives = 0;
 
@@ -267,7 +272,7 @@ GM_addStyle( `
     Cleanreads.startReviews = function() {
         Cleanreads.getReviews();
         // Reviews are delayed content so keep looking for a bit if nothing
-        if (!Cleanreads.reviews.length && Cleanreads.attempts--) {
+        if (!Cleanreads.reviews.length && Cleanreads.ATTEMPTS--) {
             setTimeout(Cleanreads.startReviews, 1000);
         } else {
             Cleanreads.calculateContent();
