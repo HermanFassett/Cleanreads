@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Cleanreads
 // @namespace    http://hermanfassett.me
-// @version      1.1
+// @version      1.2
 // @description  Cleanreads userscript for Goodreads.com
 // @author       Herman Fassett
 // @match        https://www.goodreads.com/*
@@ -64,6 +64,9 @@ GM_addStyle( `
 (function(Cleanreads) {
     'use strict';
 
+    /** The group bookshelf ID to use as default clean check list */
+    Cleanreads.CLEAN_READS_BOOKSHELF_ID = 5989;
+
     /** The positive search terms when determining verdict */
     Cleanreads.POSITIVE_SEARCH_TERMS = [
         { term: 'clean', exclude: { before: ['not', 'isn\'t'], after: ['ing'] }},
@@ -88,6 +91,25 @@ GM_addStyle( `
             Cleanreads.NEGATIVE_SEARCH_TERMS = JSON.parse(localStorage.getItem("Cleanreads.NEGATIVE_SEARCH_TERMS")) || Cleanreads.NEGATIVE_SEARCH_TERMS;
             Cleanreads.SNIPPET_HALF_LENGTH = JSON.parse(localStorage.getItem("Cleanreads.SNIPPET_HALF_LENGTH")) || Cleanreads.SNIPPET_HALF_LENGTH;
             Cleanreads.ATTEMPTS = JSON.parse(localStorage.getItem("Cleanreads.ATTEMPTS")) || Cleanreads.ATTEMPTS;
+            Cleanreads.CLEAN_READS_BOOKSHELF = JSON.parse(localStorage.getItem("Cleanreads.CLEAN_READS_BOOKSHELF")) || {
+                books: [],
+                timestamp: new Date(0),
+                unloaded: true
+            };
+
+            // Get Clean Reads shelf clean books if not recently loaded (1 day)
+            let now = new Date();
+            if (now.setDate(now.getDate() - 1) > Cleanreads.CLEAN_READS_BOOKSHELF.timestamp) {
+                Cleanreads.getGroupBookshelfBooks(Cleanreads.CLEAN_READS_BOOKSHELF_ID, 5000)
+                .then(data=> {
+                    Cleanreads.CLEAN_READS_BOOKSHELF = {
+                        books: data,
+                        timestamp: new Date()
+                    };
+                    localStorage.setItem("Cleanreads.CLEAN_READS_BOOKSHELF", JSON.stringify(Cleanreads.CLEAN_READS_BOOKSHELF));
+                })
+                .finally(Cleanreads.searchBookshelf);
+            }
 
             let settingsBody = document.getElementById("crSettingsBody");
             if (settingsBody) {
@@ -225,7 +247,6 @@ GM_addStyle( `
      * Add a search term to the settings UI
      */
     Cleanreads.addSearchTerm = function(positive, term, before, after) {
-        console.log(positive, term, before, after);
         document.getElementById(`cr${positive ? 'Positive' : 'Negative'}SearchTerms`).insertAdjacentHTML("beforeend",
             `<div class="crTermsContainer">
              <input name="excludeBefore" value="${before ? before.join(", ") : ''}" type="text" />
@@ -272,7 +293,6 @@ GM_addStyle( `
     Cleanreads.startReviews = function() {
         Cleanreads.getReviews();
         // Reviews are delayed content so keep looking for a bit if nothing
-        debugger;
         if (!Cleanreads.reviews.length && Cleanreads.ATTEMPTS--) {
             setTimeout(Cleanreads.startReviews, 1000);
         } else {
@@ -304,11 +324,53 @@ GM_addStyle( `
     };
 
     /**
+     * Get group bookshelf titles
+     * @param {string} shelfId - The bookshelf id
+     * @param {number} maxCount - The maximum number of books in the bookshelf to return
+     * @returns {Promise} - A promise that resolves to array of book ids or rejects with error
+     */
+    Cleanreads.getGroupBookshelfBooks = function(shelfId, maxCount) {
+        return new Promise(function(resolve, reject) {
+            jQuery.ajax(`${window.location.origin}/group/bookshelf/${shelfId}?utf8=✓&view=covers&per_page=${maxCount || 1000}`)
+            .done(result => {
+                resolve(jQuery(result).find(".rightContainer div > a").toArray().map(x => (x.href.match(/show\/(\d*)/)||[])[1]));
+            })
+            .fail(err => reject(err));
+        });
+    }
+
+    /**
+     * Get list titles
+     * TODO: currently only gets first page
+     * @param {string} listId - The list id
+     * @returns {Promise} - A promise that resolves to array of book ids or rejects with error
+     */
+    Cleanreads.getListBooks = function(listId) {
+        return new Promise(function(resolve, reject) {
+            jQuery.ajax(`${window.location.origin}/list/show/${listId}`)
+            .done(result => {
+                resolve(jQuery(result).find(".tableList tr td:nth-child(2) div:nth-child(1)").toArray().map(x => x.id))
+            })
+            .fail(err => {
+                reject(err);
+            });
+        });
+    };
+
+    /**
      * Calculate the cleanliness
      */
     Cleanreads.calculateContent = function() {
         let count = 0, containing = [];
         // Insert containers for bases
+        Cleanreads.crDetails.innerHTML += 
+        `<h2 class="buyButtonContainer__title u-marginTopXSmall">Bookshelf Content Basis: </h2>
+        <div id="bookshelfBasis">
+            <i class="contentComment">
+                Loading
+                <a href="${window.location.origin}/group/bookshelf/${Cleanreads.CLEAN_READS_BOOKSHELF_ID}">Clean Reads bookshelf</a>
+            </i>
+        </div>`;
         Cleanreads.crDetails.innerHTML += `<h2 class="buyButtonContainer__title u-marginTopXSmall">Description Content Basis: </h2><div id="descriptionBasis"></div>`;
         Cleanreads.crDetails.innerHTML += `<h2 class="buyButtonContainer__title u-marginTopXSmall">Clean Basis: </h2><div id="cleanBasis"></div>`;
         Cleanreads.crDetails.innerHTML += `<h2 class="buyButtonContainer__title u-marginTopXSmall">Not Clean Basis: </h2><div id="notCleanBasis"></div>`;
@@ -335,8 +397,12 @@ GM_addStyle( `
         if (!notCleanBasis.innerHTML) {
             notCleanBasis.innerHTML = '<i class="contentComment">None</i>';
         }
+
         // Update Clean Reads verdict
-        Cleanreads.updateVerdict();
+        if (!Cleanreads.CLEAN_READS_BOOKSHELF.unloaded) {
+            Cleanreads.updateVerdict();
+            Cleanreads.searchBookshelf();
+        }
     };
 
     /**
@@ -352,7 +418,6 @@ GM_addStyle( `
         if (contentMatch) {
             positive ? Cleanreads.positives++ : Cleanreads.negatives++;
             let index = contentMatch.index + contentMatch[1].length + contentMatch[2].length;
-            console.log(index, Cleanreads.SNIPPET_HALF_LENGTH);
             container.innerHTML += `
                 <div class="contentComment">
                     ...${content.slice(index - Cleanreads.SNIPPET_HALF_LENGTH, index)}<b class="content${positive ? '' : 'Not'}Clean">${
@@ -363,11 +428,36 @@ GM_addStyle( `
     };
 
     /**
-     * Update the verdict shown in UI on the book
+     * Search the loaded bookshelf book ids for current book and update verdict
      */
-    Cleanreads.updateVerdict = function() {
+    Cleanreads.searchBookshelf = function() {
+        let bookId = window.location.pathname.match(/show\/(\d*)/)[1];
+        let bookshelfBasis = document.getElementById('bookshelfBasis');
+        if (bookId && Cleanreads.CLEAN_READS_BOOKSHELF.books.indexOf(bookId) != -1) {
+            bookshelfBasis.innerHTML = 
+            `<div class="contentClean">
+                Found in 
+                <a href="${window.location.origin}/group/bookshelf/${Cleanreads.CLEAN_READS_BOOKSHELF_ID}">Clean Reads bookshelf</a>
+            </div>`;
+            Cleanreads.positives++;
+            Cleanreads.updateVerdict(true);
+        } else {
+            bookshelfBasis.innerHTML = 
+            `<div class="contentNotClean">
+                Not found in 
+                <a href="${window.location.origin}/group/bookshelf/${Cleanreads.CLEAN_READS_BOOKSHELF_ID}">Clean Reads bookshelf</a>
+            </div>`;
+            Cleanreads.updateVerdict();
+        }
+    };
+
+    /**
+     * Update the verdict shown in UI on the book
+     * @param {boolean} overrideClean - If true, always set clean, but preserve positive/negative count
+     */
+    Cleanreads.updateVerdict = function(overrideClean) {
         let verdict = document.getElementById('crVerdict');
-        if (Cleanreads.positives && Cleanreads.positives > Cleanreads.negatives) {
+        if (overrideClean || (Cleanreads.positives && Cleanreads.positives > Cleanreads.negatives)) {
             verdict.innerText = `${Cleanreads.negatives ? 'Probably' : 'Most likely'} clean`;
             verdict.className += 'contentClean';
         } else if (Cleanreads.negatives && Cleanreads.negatives > Cleanreads.positives) {
