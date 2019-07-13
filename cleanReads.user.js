@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Cleanreads
 // @namespace    http://hermanfassett.me
-// @version      1.2
+// @version      1.3
 // @description  Cleanreads userscript for Goodreads.com
 // @author       Herman Fassett
 // @match        https://www.goodreads.com/*
