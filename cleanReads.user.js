@@ -99,7 +99,7 @@ GM_addStyle( `
 
             // Get Clean Reads shelf clean books if not recently loaded (1 day)
             let now = new Date();
-            if (now.setDate(now.getDate() - 1) > Cleanreads.CLEAN_READS_BOOKSHELF.timestamp) {
+            if (now.setDate(now.getDate() - 1) > new Date(Cleanreads.CLEAN_READS_BOOKSHELF.timestamp)) {
                 Cleanreads.getGroupBookshelfBooks(Cleanreads.CLEAN_READS_BOOKSHELF_ID, 5000)
                 .then(data=> {
                     Cleanreads.CLEAN_READS_BOOKSHELF = {
