@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Cleanreads
 // @namespace    http://hermanfassett.me
-// @version      1.3
+// @version      1.4
 // @description  Cleanreads userscript for Goodreads.com
 // @author       Herman Fassett
 // @match        https://www.goodreads.com/*
@@ -76,7 +76,8 @@ GM_addStyle( `
     /** The negative search terms when determining verdict */
     Cleanreads.NEGATIVE_SEARCH_TERMS = [
         { term: 'sex', exclude: { before: ['no'], after: ['ist'] }},
-        { term: 'adult', exclude: { before: ['young', 'new'], after: []}}
+        { term: 'adult', exclude: { before: ['young', 'new'], after: ['hood', 'ing']}},
+        { term: 'erotic', exclude: { before: ['not', 'isn\'t'], after: []}}
     ];
 
     Cleanreads.SNIPPET_HALF_LENGTH = 65;
@@ -261,8 +262,10 @@ GM_addStyle( `
     Cleanreads.setupRating = function() {
         let match = window.location.pathname.match(/book\/show\/(\d+)/);
         if (match && match.length > 1) {
+            Cleanreads.bookId = window.location.pathname.match(/show\/(\d*)/)[1];
             Cleanreads.loadSettings();
             Cleanreads.reviews = [];
+            Cleanreads.shelves = [];
             Cleanreads.positives = 0;
             Cleanreads.negatives = 0;
 
@@ -283,7 +286,11 @@ GM_addStyle( `
             container.parentNode.insertBefore(contentDescription, container.nextSibling);
             Cleanreads.crDetails = document.getElementById('crDetails');
             document.getElementById('expandCrDetails').onclick = Cleanreads.expandDetails;
-            Cleanreads.startReviews();
+
+            Cleanreads.getTopBookShelves(Cleanreads.bookId).then(shelves => {
+                Cleanreads.shelves = shelves;
+                Cleanreads.startReviews();
+            }).catch(err => Cleanreads.startReviews());
         }
     };
 
@@ -337,7 +344,22 @@ GM_addStyle( `
             })
             .fail(err => reject(err));
         });
-    }
+    };
+
+    /**
+     * Get the top 100 shelf names for a given book
+     * @param {string} bookId - The book id
+     * @returns {Promise} - A promise that resolves to array of top 100 shelves for given book 
+     */
+    Cleanreads.getTopBookShelves = function(bookId) {
+        return new Promise(function(resolve, reject) {
+            jQuery.ajax(`${window.location.origin}/book/shelves/${bookId}`)
+            .done(result => {
+                resolve(jQuery(result).find('.shelfStat').toArray().map(x => `${jQuery(x).find('.actionLinkLite').text().replace(/-/gi, ' ')} (${jQuery(x).find('.smallText').text().trim()})`));
+            })
+            .fail(err => reject(err));
+        });
+    };
 
     /**
      * Get list titles
@@ -374,19 +396,25 @@ GM_addStyle( `
         Cleanreads.crDetails.innerHTML += `<h2 class="buyButtonContainer__title u-marginTopXSmall">Description Content Basis: </h2><div id="descriptionBasis"></div>`;
         Cleanreads.crDetails.innerHTML += `<h2 class="buyButtonContainer__title u-marginTopXSmall">Clean Basis: </h2><div id="cleanBasis"></div>`;
         Cleanreads.crDetails.innerHTML += `<h2 class="buyButtonContainer__title u-marginTopXSmall">Not Clean Basis: </h2><div id="notCleanBasis"></div>`;
+        
         // Get containers
         let descriptionBasis = document.getElementById('descriptionBasis'),
             cleanBasis = document.getElementById('cleanBasis'),
             notCleanBasis = document.getElementById('notCleanBasis');
+
         // Search description
         let description = `Title: ${Cleanreads.getTitle()}\nDescription: ${Cleanreads.getDescription()}`;
-        Cleanreads.POSITIVE_SEARCH_TERMS.forEach(term => Cleanreads.searchContent(term, description, descriptionBasis, true));
-        Cleanreads.NEGATIVE_SEARCH_TERMS.forEach(term => Cleanreads.searchContent(term, description, descriptionBasis, false));
+        Cleanreads.searchContent(Cleanreads.POSITIVE_SEARCH_TERMS, [description], descriptionBasis, true, Cleanreads.insertComment);
+        Cleanreads.searchContent(Cleanreads.NEGATIVE_SEARCH_TERMS, [description], descriptionBasis, false, Cleanreads.insertComment);
+
+        // Search top shelves
+        Cleanreads.searchContent(Cleanreads.POSITIVE_SEARCH_TERMS, Cleanreads.shelves, cleanBasis, true, Cleanreads.insertShelf);
+        Cleanreads.searchContent(Cleanreads.NEGATIVE_SEARCH_TERMS, Cleanreads.shelves, notCleanBasis, false, Cleanreads.insertShelf);
+
         // Search reviews
-        Cleanreads.reviews.forEach(review => {
-            Cleanreads.POSITIVE_SEARCH_TERMS.forEach(term => Cleanreads.searchContent(term, review, cleanBasis, true));
-            Cleanreads.NEGATIVE_SEARCH_TERMS.forEach(term => Cleanreads.searchContent(term, review, notCleanBasis, false));
-        });
+        Cleanreads.searchContent(Cleanreads.POSITIVE_SEARCH_TERMS, Cleanreads.reviews, cleanBasis, true, Cleanreads.insertComment);
+        Cleanreads.searchContent(Cleanreads.NEGATIVE_SEARCH_TERMS, Cleanreads.reviews, notCleanBasis, false, Cleanreads.insertComment);
+
         // Fill bases if nothing
         if (!descriptionBasis.innerHTML) {
             descriptionBasis.innerHTML = '<i class="contentComment">None</i>';
@@ -406,25 +434,58 @@ GM_addStyle( `
     };
 
     /**
-     * Search text for a given term, add found position to given container and increment positive/negative verdict
-     * @param {string} term - The search term
-     * @param {string} content - The content to search
-     * @param {element} container - The dom element to append result to
-     * @param {boolean} positive - Flag if positive or negative search term to determine result
+     * Function to search for terms in a given string
+     * @param {term} term - Term object to match in content
+     * @param {string} content - Content to search
+     * @returns {Array} - RegExp result array
      */
-    Cleanreads.searchContent = function(term, content, container, positive) {
+    Cleanreads.matchTerm = function(term, content) {
         let regex = new RegExp(`(^|[^(${term.exclude.before.join`|`}|\\s*)])(\\W*)(${term.term})(\\W*)($|[^(${term.exclude.after.join`|`}|\\s*)])`);
         let contentMatch = content.toLowerCase().match(regex);
-        if (contentMatch) {
-            positive ? Cleanreads.positives++ : Cleanreads.negatives++;
-            let index = contentMatch.index + contentMatch[1].length + contentMatch[2].length;
-            container.innerHTML += `
-                <div class="contentComment">
-                    ...${content.slice(index - Cleanreads.SNIPPET_HALF_LENGTH, index)}<b class="content${positive ? '' : 'Not'}Clean">${
-                        content.substr(index, contentMatch[3].length)
-                    }</b>${content.slice(index + contentMatch[3].length, index + Cleanreads.SNIPPET_HALF_LENGTH)}...
-                </div>`;
-        }
+        return contentMatch;
+    }
+
+    /**
+     * Search string array for given list of terms, add matches to given container, and increment positive/negative verdict
+     * @param {term object array} terms - Terms to search for
+     * @param {string array} contents - Contents to search
+     * @param {element} container - Result container
+     * @param {boolean} positive - Flag if positive or negative search term to determine result
+     * @param {function} insertFunction - Function to append result to container
+     */
+    Cleanreads.searchContent = function(terms, contents, container, positive, insertFunction) {
+        contents.forEach(content => {
+            terms.forEach(term => {
+                let contentMatch = Cleanreads.matchTerm(term, content);
+                if (!!contentMatch) {
+                    positive ? Cleanreads.positives++ : Cleanreads.negatives++;
+                    let index = contentMatch.index + contentMatch[1].length + contentMatch[2].length;
+                    insertFunction(content, contentMatch[3], index, positive, container);
+                }
+            });
+        })
+    };
+
+    /** Insert a matched comment into given container */
+    Cleanreads.insertComment = function(content, term, index, positive, container) {
+        container.innerHTML += `
+            <div class="contentComment">
+                ...${content.slice(index - Cleanreads.SNIPPET_HALF_LENGTH, index)}<b class="content${positive ? '' : 'Not'}Clean">${
+                    content.substr(index, term.length)
+                }</b>${content.slice(index + term.length, index + Cleanreads.SNIPPET_HALF_LENGTH)}...
+            </div>
+        `;
+    };
+
+    /** Insert a matched shelf into given container */
+    Cleanreads.insertShelf = function(content, term, index, positive, container) {
+        container.innerHTML += `
+            <div class="contentComment">
+                Shelved as: ${content.slice(0, index)}<b class="content${positive ? '' : 'Not'}Clean">${
+                    content.substr(index, term.length)
+                }</b>${content.slice(index + term.length)}
+            </div>
+        `;
     };
 
     /**
